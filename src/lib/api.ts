@@ -1,14 +1,12 @@
 export async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, {
-      ...init,
-      headers: {
-        Accept: "application/json",
-        ...(init?.body ? { "Content-Type": "application/json" } : {}),
-        ...init?.headers,
-      },
-    });
+    const headers = new Headers(init?.headers);
+    headers.set("Accept", "application/json");
+    if (init?.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    response = await fetch(url, { ...init, headers });
   } catch {
     throw new Error("Cannot reach the VaultPulse API. Check the deployment and try again.");
   }
