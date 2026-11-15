@@ -4,6 +4,9 @@ import VaultHeader from "./components/VaultHeader";
 import EnvEncryptor from "./components/EnvEncryptor";
 import SecretRedeemer from "./components/SecretRedeemer";
 import AuditLedger from "./components/AuditLedger";
+import { apiRequest } from "./lib/api";
+
+type HealthResponse = { ok: boolean; count: number };
 
 export default function App() {
   const [refresh, setRefresh] = useState(0);
@@ -15,14 +18,10 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
-    fetch("/api/secrets")
-      .then(async (response) => {
-        if (!response.ok) throw new Error("API unavailable");
-        return response.json();
-      })
+    apiRequest<HealthResponse>("/api?op=health")
       .then((data) => {
         if (!mounted) return;
-        setApiOnline(true);
+        setApiOnline(data.ok === true);
         setActiveCount(Number(data.count) || 0);
       })
       .catch(() => {
@@ -57,14 +56,10 @@ export default function App() {
         </div>
       </div>
       {secretId ? (
-        <div className="mx-auto max-w-3xl">
-          <SecretRedeemer secretId={secretId} keyFragment={keyFragment} />
-        </div>
+        <div className="mx-auto max-w-3xl"><SecretRedeemer secretId={secretId} keyFragment={keyFragment} /></div>
       ) : (
         <div className="grid gap-5 lg:grid-cols-[1.35fr_.85fr]">
-          <div id="composer">
-            <EnvEncryptor onCreated={() => setRefresh((value) => value + 1)} />
-          </div>
+          <div id="composer"><EnvEncryptor onCreated={() => setRefresh((value) => value + 1)} /></div>
           <AuditLedger refreshKey={refresh} />
         </div>
       )}
@@ -75,7 +70,7 @@ export default function App() {
         </a>
       </footer>
       <p className="mt-4 text-center text-[10px] leading-5 text-amber-500/70">
-        Prototype storage is ephemeral server memory. Do not use for production secrets until a shared persistent store and atomic one-time redemption are configured.
+        Prototype storage is ephemeral. Do not use for production secrets until shared persistent storage and atomic one-time redemption are configured.
       </p>
     </main>
   );
