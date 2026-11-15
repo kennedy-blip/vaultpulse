@@ -1,1 +1,72 @@
-import{useState}from"react";import{Copy,LockKeyhole,ShieldCheck}from"lucide-react";import{encryptSecret}from"../lib/crypto";export default function EnvEncryptor({onCreated}:{onCreated:()=>void}){const[text,setText]=useState("DATABASE_URL=postgres://user:password@host:5432/app\nAPI_TOKEN=replace_me\nAPP_ENV=production"),[ttl,setTtl]=useState("3600"),[burn,setBurn]=useState(true),[busy,setBusy]=useState(false),[link,setLink]=useState(""),[error,setError]=useState("");async function create(){if(!text.trim()){setError("Add a secret payload first.");return}setBusy(true);setError("");setLink("");try{const encrypted=await encryptSecret(text),r=await fetch("/api/secrets",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ciphertext:encrypted.ciphertext,iv:encrypted.iv,burnAfterRead:burn,ttlSeconds:Number(ttl)})}),data=await r.json();if(!r.ok)throw Error(data.error||"API unavailable. Run vercel dev.");const shareUrl=`${window.location.origin}/?secret=${encodeURIComponent(data.secretId)}#key=${encodeURIComponent(encrypted.keyFragment)}`;setLink(shareUrl);onCreated()}catch(e){setError(e instanceof Error?e.message:"Encryption failed")}finally{setBusy(false)}}return <section className="panel p-5 md:p-6"><div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white"><LockKeyhole size={16} className="text-emerald-400"/> Encrypted drop studio</div><p className="mb-4 text-xs text-slate-500">Encrypt locally. Only ciphertext and IV leave this browser; the key never reaches the API.</p><label className="mb-2 block text-xs text-slate-400">SECRET PAYLOAD / .ENV CONTENT</label><textarea className="field mono min-h-48 resize-y text-xs leading-6" spellCheck={false} value={text} onChange={e=>setText(e.target.value)}/><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="text-xs text-slate-400">EXPIRATION<select className="field mt-2" value={ttl} onChange={e=>setTtl(e.target.value)}><option value="600">10 minutes</option><option value="3600">1 hour</option><option value="86400">24 hours</option><option value="604800">7 days</option></select></label><label className="flex items-center gap-2 rounded-lg border border-slate-800 p-3 text-xs"><input type="checkbox" checked={burn} onChange={e=>setBurn(e.target.checked)} className="accent-emerald-500"/> Burn after first read</label></div><button className="btn btn-primary mt-5 w-full" disabled={busy} onClick={()=>void create()}><ShieldCheck size={15}/>{busy?"Encrypting...":"Encrypt & create secret drop"}</button>{error&&<p className="mt-3 text-xs text-rose-400">{error}</p>}{link&&<div className="mt-4 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4"><div className="mb-2 text-xs font-semibold text-violet-300">Secure share link</div><div className="mono break-all text-[11px] text-slate-300">{link}</div><button className="btn btn-secondary mt-3 w-full" onClick={()=>void navigator.clipboard.writeText(link)}><Copy size={14}/> Copy link</button><p className="mt-2 text-[10px] text-amber-300/80">The key is in the URL fragment. Keep the entire link private.</p></div>}</section>}
+import { useState } from "react";
+import { Copy, LockKeyhole, ShieldCheck } from "lucide-react";
+import { encryptSecret } from "../lib/crypto";
+import { apiRequest } from "../lib/api";
+
+type CreateResponse = { secretId: string; expiresAt: number };
+
+export default function EnvEncryptor({ onCreated }: { onCreated: () => void }) {
+  const [text, setText] = useState("DATABASE_URL=postgres://user:password@host:5432/app\nAPI_TOKEN=replace_me\nAPP_ENV=production");
+  const [ttl, setTtl] = useState("3600");
+  const [burn, setBurn] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [link, setLink] = useState("");
+  const [error, setError] = useState("");
+
+  async function create() {
+    if (!text.trim()) { setError("Add a secret payload first."); return; }
+    setBusy(true);
+    setError("");
+    setLink("");
+    try {
+      const encrypted = await encryptSecret(text);
+      const data = await apiRequest<CreateResponse>("/api?op=secrets", {
+        method: "POST",
+        body: JSON.stringify({
+          ciphertext: encrypted.ciphertext,
+          iv: encrypted.iv,
+          burnAfterRead: burn,
+          ttlSeconds: Number(ttl),
+        }),
+      });
+      const shareUrl = `${window.location.origin}/?secret=${encodeURIComponent(data.secretId)}#key=${encodeURIComponent(encrypted.keyFragment)}`;
+      setLink(shareUrl);
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to create the encrypted drop.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel p-5 md:p-6">
+      <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white"><LockKeyhole size={16} className="text-emerald-400" /> Encrypted drop studio</div>
+      <p className="mb-4 text-xs text-slate-500">Encrypt locally. Only ciphertext and IV leave this browser; the key never reaches the API.</p>
+      <label className="mb-2 block text-xs text-slate-400">SECRET PAYLOAD / .ENV CONTENT</label>
+      <textarea className="field mono min-h-48 resize-y text-xs leading-6" spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} />
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="text-xs text-slate-400">EXPIRATION
+          <select className="field mt-2" value={ttl} onChange={(e) => setTtl(e.target.value)}>
+            <option value="600">10 minutes</option><option value="3600">1 hour</option><option value="86400">24 hours</option><option value="604800">7 days</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 rounded-lg border border-slate-800 p-3 text-xs">
+          <input type="checkbox" checked={burn} onChange={(e) => setBurn(e.target.checked)} className="accent-emerald-500" /> Burn after first read
+        </label>
+      </div>
+      <button className="btn btn-primary mt-5 w-full" disabled={busy} onClick={() => void create()}>
+        <ShieldCheck size={15} />{busy ? "Encrypting..." : "Encrypt & create secret drop"}
+      </button>
+      {error && <p role="alert" className="mt-3 rounded-lg border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-rose-300">{error}</p>}
+      {link && (
+        <div className="mt-4 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
+          <div className="mb-2 text-xs font-semibold text-violet-300">Secure share link</div>
+          <div className="mono break-all text-[11px] text-slate-300">{link}</div>
+          <button className="btn btn-secondary mt-3 w-full" onClick={() => void navigator.clipboard.writeText(link)}><Copy size={14} /> Copy link</button>
+          <p className="mt-2 text-[10px] text-amber-300/80">The key is in the URL fragment. Keep the entire link private.</p>
+        </div>
+      )}
+    </section>
+  );
+}
